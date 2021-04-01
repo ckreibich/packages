@@ -1,0 +1,45 @@
+name: Test & install eligible packages with Zeek nightly build
+
+on:
+  push:
+  schedule:
+    - cron: '30 0 * * *'
+
+jobs:
+  get_packages:
+    runs-on: ubuntu-20.04
+    outputs:
+      packages: ${{ steps.json.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v2
+      - id: json
+        # Select all packages that do not list external dependencies
+        # -- we currently have no way to address these in an automated
+        # fashion.
+        run: >
+          echo ::set-output name=packages::$(.ci/ini2json.py aggregate.meta | jq -c "[to_entries[]
+          | select(.value | has(\"url\")) | select(.value | has(\"external_depends\")
+          | not) | .key]")
+  test_packages:
+    runs-on: ubuntu-20.04
+    needs: get_packages
+    continue-on-error: true
+    strategy:
+      matrix:
+        # This is okay until we hit 512 packages
+        package: ${{ fromJson(needs.get_packages.outputs.packages) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: zeek/action-zkg-install@master
+        with:
+          zeek_version: 'zeek-nightly'
+          pkg: ${{ matrix.package }}
+          load_packages: true
+      - run: echo "packageslug=$(echo ${{ matrix.package }} | sed 's/[^a-zA-Z0-9]/_/g')" >>$GITHUB_ENV
+        if: failure()
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: zkg-logs-${{ env.packageslug }}
+          path: ${{ github.workspace }}/.action-zkg-install/artifacts
