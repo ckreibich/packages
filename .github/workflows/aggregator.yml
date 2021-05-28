@@ -1,0 +1,18 @@
+name: Aggregate package source
+
+on:
+  push:
+  schedule:
+    - cron: '0 */3 * * *'
+
+jobs:
+  aggregate-metadata:
+    runs-on: ubuntu-20.04
+    env:
+      ZKG_DEFAULT_SOURCE: https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/ckreibich/packages
+    steps:
+      - name: zkg refresh
+        run: |
+          git config --global user.name "Zeek Package Bot"
+          git config --global user.email "package-bot@zeek.org"
+          pip3 install zkg && zkg -vvv refresh --aggregate --push
